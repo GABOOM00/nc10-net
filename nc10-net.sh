@@ -1,73 +1,77 @@
 #!/usr/bin/env bash
 #
-# nc10-net — Selettore di connessione per Samsung NC10
+# nc10-net — Selettore di connessione per Samsung NC10 (wpa_supplicant)
 # Menu all'avvio: casa (Vodafone), telefono via cavo USB, o nuova rete WiFi.
 #
-# Requisiti: NetworkManager (nmcli). Verifica con:  nmcli --version
+# Requisiti: wpa_supplicant, wpa_cli, dhclient, iw
 #
 
 # ============================================================
 # CONFIGURAZIONE — modifica queste due righe con i tuoi dati
 # ============================================================
-HOME_SSID="Vodafone-XXXXXXX"      # <-- nome esatto della tua WiFi di casa
-HOME_PASS=""                      # <-- password (lasciala vuota se la rete
-                                  #     è già salvata in NetworkManager)
+HOME_SSID="Vodafone-XXXXXX"      # <-- nome esatto della tua WiFi di casa
+HOME_PASS="TUA-PASSWORD"          # <-- password della rete di casa
 # ============================================================
 
 VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; RESET='\033[0m'
+WPA_CONFIG="/etc/wpa_supplicant/wpa_supplicant.conf"
 
 ok()   { echo -e "${VERDE}[OK]${RESET} $1"; }
 err()  { echo -e "${ROSSO}[ERRORE]${RESET} $1"; }
 info() { echo -e "${GIALLO}[...]${RESET} $1"; }
 
-controlla_nmcli() {
-    if ! command -v nmcli >/dev/null 2>&1; then
-        err "nmcli non trovato. Installa NetworkManager:"
-        echo "    sudo apt install network-manager"
+controlla_permessi() {
+    if [ "$EUID" -ne 0 ]; then
+        err "Questo script richiede sudo. Riavvia con:"
+        echo "    sudo nc10-net"
         exit 1
     fi
 }
 
-test_connessione() {
-    info "Verifico la connessione a internet..."
-    sleep 3
-    if ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
-        ok "Sei connesso a internet!"
-        return 0
-    else
-        err "Connesso alla rete ma internet non risponde (o connessione fallita)."
-        return 1
-    fi
+trova_interfaccia_wifi() {
+    # Cerca l'interfaccia WiFi (wlan0, wlp2s0, ecc.)
+    iw dev | grep "Interface" | head -n1 | awk '{print $NF}'
+}
+
+trova_interfaccia_usb() {
+    # Cerca interfaccia USB (usb0, enp0s...)
+    ip link | grep -E '^\d+: (usb|enp[0-9]+s[0-9]+u)' | head -n1 | awk -F: '{print $2}' | xargs
+}
+
+abilita_wifi() {
+    info "Abilito il WiFi..."
+    rfkill unblock wlan 2>/dev/null || true
+    ip link set "$1" up
+    sleep 2
 }
 
 connetti_casa() {
-    info "Accendo il WiFi..."
-    nmcli radio wifi on
-    sleep 2
-
-    # Se la connessione è già salvata, la riattivo direttamente
-    if nmcli -t -f NAME connection show | grep -Fxq "$HOME_SSID"; then
-        info "Mi connetto alla rete di casa: $HOME_SSID"
-        if nmcli connection up "$HOME_SSID"; then
-            test_connessione; return
-        fi
+    local wifi=$(trova_interfaccia_wifi)
+    if [ -z "$wifi" ]; then
+        err "Nessuna interfaccia WiFi trovata."
+        return 1
     fi
 
-    # Altrimenti provo a connettermi da zero
+    abilita_wifi "$wifi"
     info "Cerco la rete $HOME_SSID..."
-    nmcli device wifi rescan 2>/dev/null; sleep 4
-    if [ -n "$HOME_PASS" ]; then
-        nmcli device wifi connect "$HOME_SSID" password "$HOME_PASS"
-    else
-        nmcli device wifi connect "$HOME_SSID"
-    fi
+    iw "$wifi" scan | grep -q "$HOME_SSID" || {
+        err "Rete $HOME_SSID non trovata."
+        return 1
+    }
 
-    if [ $? -eq 0 ]; then
-        test_connessione
-    else
-        err "Connessione a $HOME_SSID fallita."
-        err "Controlla che HOME_SSID e HOME_PASS in cima allo script siano giusti."
-    fi
+    # Creo un profilo temporaneo per la connessione
+    local temp_conf="/tmp/wpa_temp.conf"
+    wpa_passphrase "$HOME_SSID" "$HOME_PASS" > "$temp_conf"
+
+    info "Mi connetto a $HOME_SSID..."
+    wpa_supplicant -B -i "$wifi" -D nl80211,wext -c "$temp_conf"
+    sleep 3
+
+    info "Richiedo un indirizzo IP..."
+    dhclient -v "$wifi"
+    
+    test_connessione
+    rm -f "$temp_conf"
 }
 
 connetti_telefono() {
@@ -77,37 +81,45 @@ connetti_telefono() {
     echo ""
     read -rp "Quando hai fatto, premi INVIO..."
 
-    info "Cerco l'interfaccia di tethering USB..."
-    local iface=""
-    for tentativo in 1 2 3 4 5 6; do
-        # Le interfacce USB tethering di solito si chiamano usb0 o enp...u...
-        iface=$(nmcli -t -f DEVICE,TYPE device | grep -E '^(usb|enp[0-9]+s[0-9]+u)' | cut -d: -f1 | head -n1)
-        [ -n "$iface" ] && break
+    info "Cerco l'interfaccia USB..."
+    local usb=$(trova_interfaccia_usb)
+    local tentativo=1
+    while [ -z "$usb" ] && [ $tentativo -le 6 ]; do
         sleep 2
+        usb=$(trova_interfaccia_usb)
+        tentativo=$((tentativo + 1))
     done
 
-    if [ -z "$iface" ]; then
+    if [ -z "$usb" ]; then
         err "Nessuna interfaccia USB trovata."
-        err "Verifica che il tethering USB sia attivo sul telefono e riprova."
+        err "Verifica che il tethering USB sia attivo sul telefono."
         return 1
     fi
 
-    info "Trovata interfaccia: $iface — mi connetto..."
-    if nmcli device connect "$iface"; then
-        test_connessione
-    else
-        err "Connessione tramite $iface fallita."
-    fi
+    info "Trovata interfaccia: $usb"
+    ip link set "$usb" up
+    sleep 1
+
+    info "Richiedo un indirizzo IP su $usb..."
+    dhclient -v "$usb"
+    test_connessione
 }
 
 connetti_nuova_rete() {
-    info "Accendo il WiFi e cerco le reti disponibili..."
-    nmcli radio wifi on
-    nmcli device wifi rescan 2>/dev/null; sleep 4
+    local wifi=$(trova_interfaccia_wifi)
+    if [ -z "$wifi" ]; then
+        err "Nessuna interfaccia WiFi trovata."
+        return 1
+    fi
 
+    abilita_wifi "$wifi"
+    
+    info "Scansiono le reti disponibili..."
+    iw "$wifi" scan > /tmp/scan_output.txt
+    
     echo ""
     echo "Reti WiFi trovate:"
-    nmcli -f SSID,SIGNAL,SECURITY device wifi list | head -n 15
+    grep "SSID:" /tmp/scan_output.txt | sed 's/.*SSID: /  /'
     echo ""
 
     read -rp "Nome della rete (SSID): " ssid
@@ -119,22 +131,51 @@ connetti_nuova_rete() {
     read -rsp "Password (lascia vuoto se la rete è aperta): " pass
     echo ""
 
+    local temp_conf="/tmp/wpa_temp.conf"
+    
     if [ -n "$pass" ]; then
-        nmcli device wifi connect "$ssid" password "$pass"
+        wpa_passphrase "$ssid" "$pass" > "$temp_conf"
     else
-        nmcli device wifi connect "$ssid"
+        # Rete aperta
+        cat > "$temp_conf" <<EOF
+network={
+    ssid="$ssid"
+    key_mgmt=NONE
+}
+EOF
     fi
 
-    if [ $? -eq 0 ]; then
-        test_connessione
-        ok "La rete è stata salvata: la prossima volta si connetterà da sola."
+    info "Mi connetto a \"$ssid\"..."
+    wpa_supplicant -B -i "$wifi" -D nl80211,wext -c "$temp_conf"
+    sleep 3
+
+    info "Richiedo un indirizzo IP..."
+    dhclient -v "$wifi"
+    
+    if test_connessione; then
+        ok "Connessione riuscita!"
+        # Salvo la rete (opzionale: aggiungi a wpa_supplicant.conf)
     else
-        err "Connessione a \"$ssid\" fallita. Controlla SSID e password."
+        err "Connessione a \"$ssid\" fallita."
+    fi
+    
+    rm -f "$temp_conf"
+}
+
+test_connessione() {
+    info "Verifico la connessione a internet..."
+    sleep 3
+    if ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
+        ok "Sei connesso a internet!"
+        return 0
+    else
+        err "Rete connessa ma internet non risponde."
+        return 1
     fi
 }
 
 # ================= MENU PRINCIPALE =================
-controlla_nmcli
+controlla_permessi
 
 while true; do
     echo ""
