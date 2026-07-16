@@ -100,7 +100,7 @@ echo "========================================"
 if [ "$PROBLEMI" -gt 0 ]; then
     ok "Riparazione completata: risolti $PROBLEMI problemi."
 else
-    ok "Nessun problema trovato: la rete era già pulita."
+    ok "Nessun problema trovato: la rete era gia' pulita."
 fi
 echo "========================================"
 

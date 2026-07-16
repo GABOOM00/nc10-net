@@ -5,7 +5,11 @@
 #       gaboom net|set|fix|server   (scorciatoie)
 #
 
-VERDE='\033[0;32m'; GIALLO='\033[1;33m'; CIANO='\033[0;36m'; RESET='\033[0m'
+if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+    VERDE='\033[0;32m'; GIALLO='\033[1;33m'; CIANO='\033[0;36m'; RESET='\033[0m'
+else
+    VERDE=''; GIALLO=''; CIANO=''; RESET=''
+fi
 
 mostra_help() {
     echo ""

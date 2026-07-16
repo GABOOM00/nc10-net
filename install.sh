@@ -32,7 +32,7 @@ for nome in nc10-net nc10-set nc10-fix nc10-server gaboom; do
 done
 
 # 3) Sudo senza password SOLO per i tre comandi di rete,
-#    così l'avvio automatico e le riparazioni non chiedono la password.
+#    cosi' l'avvio automatico e le riparazioni non chiedono la password.
 cat > /etc/sudoers.d/nc10-net <<EOF
 $UTENTE ALL=(root) NOPASSWD: /usr/local/bin/nc10-net, /usr/local/bin/nc10-set, /usr/local/bin/nc10-fix
 EOF
@@ -83,4 +83,4 @@ echo "  4) (Opzionale) Configura il server SSH: sudo nano /usr/local/bin/nc10-se
 echo ""
 echo "Per rivedere in qualsiasi momento l'elenco dei comandi:  gaboom help"
 echo ""
-echo "Al prossimo riavvio il menu di connessione apparirà da solo."
+echo "Al prossimo riavvio il menu di connessione apparira' da solo."

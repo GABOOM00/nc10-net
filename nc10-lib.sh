@@ -6,7 +6,12 @@
 
 CONFIG="/etc/nc10-net.conf"
 
-VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; RESET='\033[0m'
+# Colori solo se il terminale li supporta davvero
+if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+    VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; RESET='\033[0m'
+else
+    VERDE=''; ROSSO=''; GIALLO=''; RESET=''
+fi
 
 ok()   { echo -e "${VERDE}[OK]${RESET} $1"; }
 err()  { echo -e "${ROSSO}[ERRORE]${RESET} $1"; }
@@ -119,7 +124,7 @@ connetti_wifi() {
     resetta_interfaccia "$wifi"
 
     local temp_conf="/tmp/wpa_temp.conf"
-    # Creo il file con permessi ristretti (solo root può leggerlo)
+    # Creo il file con permessi ristretti (solo root puo' leggerlo)
     rm -f "$temp_conf"
     (umask 077; : > "$temp_conf")
     if [ -n "$pass" ]; then

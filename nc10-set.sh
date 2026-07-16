@@ -20,7 +20,7 @@ imposta_wifi() {
     resetta_interfaccia "$wifi"
     scegli_ssid_numerato "$wifi" || { err "Annullato."; return 1; }
 
-    read -rsp "Password di \"$SSID_SCELTO\" (lascia vuoto se la rete è aperta): " pass
+    read -rsp "Password di \"$SSID_SCELTO\" (lascia vuoto se la rete e' aperta): " pass
     echo ""
 
     read -rp "Vuoi provare subito la connessione? [s/n]: " prova
