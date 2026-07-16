@@ -6,8 +6,23 @@
 
 CONFIG="/etc/nc10-net.conf"
 
-# Colori solo se il terminale li supporta davvero
-if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+# Riconoscimento automatico del terminale: colori solo su terminali moderni,
+# testo puro su ROXTerm, console, terminali datati o locale non UTF-8
+terminale_moderno() {
+    [ -t 1 ] || return 1
+    if [ -n "$ROXTERM_ID" ] || [ -n "$ROXTERM_PID" ] || [ -n "$ROXTERM_NUM" ]; then
+        return 1
+    fi
+    command -v tput >/dev/null 2>&1 || return 1
+    [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ] || return 1
+    case "$TERM" in
+        dumb|linux|vt*|"") return 1 ;;
+    esac
+    locale 2>/dev/null | grep -qi 'utf-*8' || return 1
+    return 0
+}
+
+if terminale_moderno; then
     VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; RESET='\033[0m'
 else
     VERDE=''; ROSSO=''; GIALLO=''; RESET=''

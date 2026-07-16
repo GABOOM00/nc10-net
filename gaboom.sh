@@ -6,9 +6,31 @@
 #       gaboom net|set|fix|server
 #
 
-GABOOM_VERSIONE="2.6.0"
+GABOOM_VERSIONE="2.7.0"
 
-if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+# Riconoscimento automatico del terminale:
+# - versione LEGGERA (testo puro, zero escape) su ROXTerm, console pura,
+#   terminali datati, locale non UTF-8 o output rediretto
+# - versione PESANTE (colori) su terminali moderni (Termius, ssh da PC, ecc.)
+terminale_moderno() {
+    # Output non interattivo (pipe/file): sempre leggera
+    [ -t 1 ] || return 1
+    # ROXTerm si annuncia con queste variabili: versione leggera
+    if [ -n "$ROXTERM_ID" ] || [ -n "$ROXTERM_PID" ] || [ -n "$ROXTERM_NUM" ]; then
+        return 1
+    fi
+    # Terminali senza capacita' dichiarate
+    command -v tput >/dev/null 2>&1 || return 1
+    [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ] || return 1
+    case "$TERM" in
+        dumb|linux|vt*|"") return 1 ;;
+    esac
+    # Codifica non UTF-8: meglio leggera
+    locale 2>/dev/null | grep -qi 'utf-*8' || return 1
+    return 0
+}
+
+if terminale_moderno; then
     VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; CIANO='\033[0;36m'; RESET='\033[0m'
 else
     VERDE=''; ROSSO=''; GIALLO=''; CIANO=''; RESET=''
@@ -43,11 +65,11 @@ stato_servizio() {
     # Il pattern [x]yz impedisce al grep di rilevare se stesso (falsi positivi)
     local pattern="[${2:0:1}]${2:1}"
     if ps -eo args= 2>/dev/null | grep -q "$pattern"; then
-        printf "  %-12s : $(echo -e "${VERDE}ATTIVO${RESET}")\n" "$1"
+        printf "  %-12s : $(echo -e "${VERDE}[+] ATTIVO${RESET}")\n" "$1"
     elif command -v "$2" >/dev/null 2>&1; then
-        printf "  %-12s : spento\n" "$1"
+        printf "  %-12s : [-] spento\n" "$1"
     else
-        printf "  %-12s : non installato\n" "$1"
+        printf "  %-12s : [ ] non installato\n" "$1"
     fi
 }
 
@@ -99,12 +121,12 @@ mostra_info() {
         riga "IPv6"      "${ip6:-nessuno}"
         riga "Gateway"   "${gw:-nessuno}"
         if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1; then
-            riga "Internet" "$(echo -e "${VERDE}FUNZIONA${RESET}")"
+            riga "Internet" "$(echo -e "${VERDE}[+] FUNZIONA${RESET}")"
         else
-            riga "Internet" "$(echo -e "${GIALLO}NON RISPONDE${RESET} (prova: gaboom fix)")"
+            riga "Internet" "$(echo -e "${GIALLO}[!] NON RISPONDE${RESET} (prova: gaboom fix)")"
         fi
     else
-        riga "Connessione" "$(echo -e "${GIALLO}NESSUNA${RESET} (usa: gaboom net)")"
+        riga "Connessione" "$(echo -e "${GIALLO}[!] NESSUNA${RESET} (usa: gaboom net)")"
     fi
     ssh_porta=$(awk '/^[Pp]ort / {print $2; exit}' /etc/ssh/sshd_config 2>/dev/null)
     riga "SSH Port" "${ssh_porta:-22 (default)}"
@@ -112,7 +134,7 @@ mostra_info() {
         ts_ip=$(tailscale ip -4 2>/dev/null | head -n1)
         riga "Tailscale" "${ts_ip:-attivo ma senza IP}"
     else
-        riga "Tailscale" "non installato"
+        riga "Tailscale" "[ ] non installato"
     fi
 
     # --- Rete di sistema (nc10-net) ---
@@ -136,9 +158,9 @@ mostra_info() {
     srv_ip=$(grep -m1 '^SERVER_IP=' /usr/local/bin/nc10-server 2>/dev/null | cut -d'"' -f2)
     if [ -n "$srv_ip" ] && [ "$srv_ip" != "192.168.1.XX" ]; then
         if ping -c 1 -W 2 "$srv_ip" >/dev/null 2>&1; then
-            riga "Server" "$(echo -e "$srv_ip ${VERDE}ACCESO${RESET} (gaboom server)")"
+            riga "Server" "$(echo -e "$srv_ip ${VERDE}[+] ACCESO${RESET} (gaboom server)")"
         else
-            riga "Server" "$(echo -e "$srv_ip ${GIALLO}NON RAGGIUNGIBILE${RESET}")"
+            riga "Server" "$(echo -e "$srv_ip ${GIALLO}[!] NON RAGGIUNGIBILE${RESET}")"
         fi
     else
         riga "Server" "non configurato"
@@ -153,12 +175,12 @@ mostra_info() {
     stato_servizio "Bettercap"   "bettercap"
     if command -v wg >/dev/null 2>&1; then
         if [ -n "$(wg show interfaces 2>/dev/null)" ]; then
-            riga "WireGuard" "$(echo -e "${VERDE}ATTIVO${RESET} ($(wg show interfaces 2>/dev/null))")"
+            riga "WireGuard" "$(echo -e "${VERDE}[+] ATTIVO${RESET} ($(wg show interfaces 2>/dev/null))")"
         else
-            riga "WireGuard" "spento"
+            riga "WireGuard" "[-] spento"
         fi
     else
-        riga "WireGuard" "non installato"
+        riga "WireGuard" "[ ] non installato"
     fi
     if command -v docker >/dev/null 2>&1 && pgrep -x dockerd >/dev/null 2>&1; then
         riga "Containers" "$(docker ps -q 2>/dev/null | wc -l) attivi"
