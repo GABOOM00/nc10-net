@@ -1,205 +1,118 @@
 #!/usr/bin/env bash
 #
-# nc10-net — Selettore di connessione per Samsung NC10 (wpa_supplicant)
-# Menu all'avvio: casa (Vodafone), telefono via cavo USB, o nuova rete WiFi.
-#
-# Requisiti: wpa_supplicant, wpa_cli, dhclient, iw
+# nc10-net — Menu di connessione per Samsung NC10 (wpa_supplicant)
+# Eseguibile in qualsiasi momento:  sudo nc10-net
 #
 
-# ============================================================
-# CONFIGURAZIONE — modifica queste due righe con i tuoi dati
-# ============================================================
-HOME_SSID="Vodafone-XXXXXX"      # <-- nome esatto della tua WiFi di casa
-HOME_PASS="TUA-PASSWORD"          # <-- password della rete di casa
-# ============================================================
+. /usr/local/lib/nc10-lib.sh || { echo "Libreria nc10-lib mancante: rilancia install.sh"; exit 1; }
 
-VERDE='\033[0;32m'; ROSSO='\033[0;31m'; GIALLO='\033[1;33m'; RESET='\033[0m'
-WPA_CONFIG="/etc/wpa_supplicant/wpa_supplicant.conf"
+richiedi_root
 
-ok()   { echo -e "${VERDE}[OK]${RESET} $1"; }
-err()  { echo -e "${ROSSO}[ERRORE]${RESET} $1"; }
-info() { echo -e "${GIALLO}[...]${RESET} $1"; }
-
-controlla_permessi() {
-    if [ "$EUID" -ne 0 ]; then
-        err "Questo script richiede sudo. Riavvia con:"
-        echo "    sudo nc10-net"
+controlla_comandi() {
+    local mancanti=""
+    for cmd in wpa_supplicant dhclient iw ip; do
+        command -v "$cmd" >/dev/null 2>&1 || mancanti="$mancanti $cmd"
+    done
+    if [ -n "$mancanti" ]; then
+        err "Comandi mancanti:$mancanti"
+        echo "    Installa con: sudo apt install wpasupplicant isc-dhcp-client iw"
         exit 1
     fi
 }
 
-trova_interfaccia_wifi() {
-    # Cerca l'interfaccia WiFi (wlan0, wlp2s0, ecc.)
-    iw dev | grep "Interface" | head -n1 | awk '{print $NF}'
+connetti_sistema() {
+    leggi_config
+    if [ -z "$TIPO" ]; then
+        err "Nessuna rete di sistema impostata."
+        echo "    Impostala con:  sudo nc10-set"
+        return 1
+    fi
+
+    case "$TIPO" in
+        wifi)
+            info "Rete di sistema: WiFi \"$SSID\""
+            connetti_wifi "$SSID" "$PASS"
+            ;;
+        usb)
+            info "Rete di sistema: telefono via cavo USB"
+            connetti_usb
+            ;;
+        ethernet)
+            info "Rete di sistema: cavo ethernet"
+            connetti_ethernet
+            ;;
+        *)
+            err "Tipo di rete di sistema sconosciuto: $TIPO (correggi con: sudo nc10-set)"
+            return 1
+            ;;
+    esac
 }
 
-trova_interfaccia_usb() {
-    # Cerca interfaccia USB (usb0, enp0s...)
-    ip link | grep -E '^\d+: (usb|enp[0-9]+s[0-9]+u)' | head -n1 | awk -F: '{print $2}' | xargs
-}
-
-abilita_wifi() {
-    info "Abilito il WiFi..."
-    rfkill unblock wlan 2>/dev/null || true
-    ip link set "$1" up
-    sleep 2
-}
-
-connetti_casa() {
-    local wifi=$(trova_interfaccia_wifi)
+connetti_altra_rete() {
+    local wifi
+    wifi=$(trova_interfaccia_wifi)
     if [ -z "$wifi" ]; then
         err "Nessuna interfaccia WiFi trovata."
         return 1
     fi
 
-    abilita_wifi "$wifi"
-    info "Cerco la rete $HOME_SSID..."
-    iw "$wifi" scan | grep -q "$HOME_SSID" || {
-        err "Rete $HOME_SSID non trovata."
-        return 1
-    }
+    resetta_interfaccia "$wifi"
+    scegli_ssid_numerato "$wifi" || { err "Annullato."; return 1; }
 
-    # Creo un profilo temporaneo per la connessione
-    local temp_conf="/tmp/wpa_temp.conf"
-    wpa_passphrase "$HOME_SSID" "$HOME_PASS" > "$temp_conf"
-
-    info "Mi connetto a $HOME_SSID..."
-    wpa_supplicant -B -i "$wifi" -D nl80211,wext -c "$temp_conf"
-    sleep 3
-
-    info "Richiedo un indirizzo IP..."
-    dhclient -v "$wifi"
-    
-    test_connessione
-    rm -f "$temp_conf"
-}
-
-connetti_telefono() {
-    echo ""
-    echo "  1. Collega il telefono al computer con il cavo USB"
-    echo "  2. Sul telefono attiva: Impostazioni > Hotspot e tethering > Tethering USB"
-    echo ""
-    read -rp "Quando hai fatto, premi INVIO..."
-
-    info "Cerco l'interfaccia USB..."
-    local usb=$(trova_interfaccia_usb)
-    local tentativo=1
-    while [ -z "$usb" ] && [ $tentativo -le 6 ]; do
-        sleep 2
-        usb=$(trova_interfaccia_usb)
-        tentativo=$((tentativo + 1))
-    done
-
-    if [ -z "$usb" ]; then
-        err "Nessuna interfaccia USB trovata."
-        err "Verifica che il tethering USB sia attivo sul telefono."
-        return 1
-    fi
-
-    info "Trovata interfaccia: $usb"
-    ip link set "$usb" up
-    sleep 1
-
-    info "Richiedo un indirizzo IP su $usb..."
-    dhclient -v "$usb"
-    test_connessione
-}
-
-connetti_nuova_rete() {
-    local wifi=$(trova_interfaccia_wifi)
-    if [ -z "$wifi" ]; then
-        err "Nessuna interfaccia WiFi trovata."
-        return 1
-    fi
-
-    abilita_wifi "$wifi"
-    
-    info "Scansiono le reti disponibili..."
-    iw "$wifi" scan > /tmp/scan_output.txt
-    
-    echo ""
-    echo "Reti WiFi trovate:"
-    grep "SSID:" /tmp/scan_output.txt | sed 's/.*SSID: /  /'
+    read -rsp "Password di \"$SSID_SCELTO\" (lascia vuoto se la rete è aperta): " pass
     echo ""
 
-    read -rp "Nome della rete (SSID): " ssid
-    if [ -z "$ssid" ]; then
-        err "SSID vuoto, annullo."
-        return 1
-    fi
-
-    read -rsp "Password (lascia vuoto se la rete è aperta): " pass
-    echo ""
-
-    local temp_conf="/tmp/wpa_temp.conf"
-    
-    if [ -n "$pass" ]; then
-        wpa_passphrase "$ssid" "$pass" > "$temp_conf"
-    else
-        # Rete aperta
-        cat > "$temp_conf" <<EOF
-network={
-    ssid="$ssid"
-    key_mgmt=NONE
-}
-EOF
-    fi
-
-    info "Mi connetto a \"$ssid\"..."
-    wpa_supplicant -B -i "$wifi" -D nl80211,wext -c "$temp_conf"
-    sleep 3
-
-    info "Richiedo un indirizzo IP..."
-    dhclient -v "$wifi"
-    
-    if test_connessione; then
-        ok "Connessione riuscita!"
-        # Salvo la rete (opzionale: aggiungi a wpa_supplicant.conf)
-    else
-        err "Connessione a \"$ssid\" fallita."
-    fi
-    
-    rm -f "$temp_conf"
-}
-
-test_connessione() {
-    info "Verifico la connessione a internet..."
-    sleep 3
-    if ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
-        ok "Sei connesso a internet!"
+    if connetti_wifi "$SSID_SCELTO" "$pass"; then
+        echo ""
+        read -rp "Vuoi impostare \"$SSID_SCELTO\" come nuova rete di sistema? [s/n]: " salva
+        if [ "$salva" = "s" ] || [ "$salva" = "S" ]; then
+            salva_config "wifi" "$SSID_SCELTO" "$pass"
+        fi
         return 0
     else
-        err "Rete connessa ma internet non risponde."
+        err "Connessione a \"$SSID_SCELTO\" fallita. Controlla la password."
         return 1
     fi
 }
 
 # ================= MENU PRINCIPALE =================
-controlla_permessi
+controlla_comandi
+leggi_config
+
+DESCR_SISTEMA="non impostata — usa: sudo nc10-set"
+case "$TIPO" in
+    wifi)     DESCR_SISTEMA="WiFi \"$SSID\"" ;;
+    usb)      DESCR_SISTEMA="telefono via cavo USB" ;;
+    ethernet) DESCR_SISTEMA="cavo ethernet" ;;
+esac
 
 while true; do
     echo ""
-    echo "=================================="
+    echo "===================================="
     echo "   NC10 — Come vuoi connetterti?"
-    echo "=================================="
-    echo "  1) WiFi di casa (Vodafone)"
+    echo "===================================="
+    echo "  1) Rete di sistema ($DESCR_SISTEMA)"
     echo "  2) Telefono via cavo USB"
-    echo "  3) Un'altra rete WiFi"
-    echo "  4) Non connettermi / Esci"
+    echo "  3) Un'altra rete WiFi (con elenco)"
+    echo "  4) Ripara la rete (nc10-fix)"
+    echo "  5) Non connettermi / Esci"
     echo ""
-    read -rp "Scelta [1-4]: " scelta
+    read -rp "Scelta [1-5]: " scelta
 
     case "$scelta" in
-        1) connetti_casa && break ;;
-        2) connetti_telefono && break ;;
-        3) connetti_nuova_rete && break ;;
-        4) echo "Ok, nessuna connessione. Ciao!"; break ;;
+        1) connetti_sistema && break ;;
+        2) connetti_usb && break ;;
+        3) connetti_altra_rete && break ;;
+        4) /usr/local/bin/nc10-fix --da-menu; leggi_config ;;
+        5) echo "Ok, nessuna connessione. Ciao!"; break ;;
         *) err "Scelta non valida, riprova." ;;
     esac
 
-    echo ""
-    read -rp "Vuoi riprovare? [s/n]: " riprova
-    [ "$riprova" != "s" ] && [ "$riprova" != "S" ] && break
+    if [ "$scelta" != "4" ]; then
+        echo ""
+        read -rp "Vuoi riprovare? [s/n]: " riprova
+        [ "$riprova" != "s" ] && [ "$riprova" != "S" ] && break
+    fi
 done
 
 echo ""
