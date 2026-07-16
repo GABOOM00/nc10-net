@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# nc10-net — Menu di connessione per Samsung NC10 (wpa_supplicant)
+# nc10-net - Menu di connessione per Samsung NC10 (wpa_supplicant)
 # Eseguibile in qualsiasi momento:  sudo nc10-net
 #
 
@@ -79,7 +79,7 @@ connetti_altra_rete() {
 controlla_comandi
 leggi_config
 
-DESCR_SISTEMA="non impostata — usa: sudo nc10-set"
+DESCR_SISTEMA="non impostata - usa: sudo nc10-set"
 case "$TIPO" in
     wifi)     DESCR_SISTEMA="WiFi \"$SSID\"" ;;
     usb)      DESCR_SISTEMA="telefono via cavo USB" ;;
@@ -89,7 +89,7 @@ esac
 while true; do
     echo ""
     echo "===================================="
-    echo "   NC10 — Come vuoi connetterti?"
+    echo "   NC10 - Come vuoi connetterti?"
     echo "===================================="
     echo "  1) Rete di sistema ($DESCR_SISTEMA)"
     echo "  2) Telefono via cavo USB"

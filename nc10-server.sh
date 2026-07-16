@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# nc10-server — Connessione SSH rapida al server domestico
+# nc10-server - Connessione SSH rapida al server domestico
 # Uso:  nc10-server
 #
 
 # ============================================================
-# CONFIGURAZIONE — modifica con i dati del tuo server Ubuntu
+# CONFIGURAZIONE - modifica con i dati del tuo server Ubuntu
 # ============================================================
 SERVER_IP="192.168.1.XX"       # <-- IP del server (meglio se fisso/prenotato nel modem)
 SERVER_USER="tuo-utente"       # <-- utente sul server

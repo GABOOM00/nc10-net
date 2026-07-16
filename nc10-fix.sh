@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# nc10-fix — Diagnosi e riparazione automatica dei problemi di rete
+# nc10-fix - Diagnosi e riparazione automatica dei problemi di rete
 # Risolve: reti sovrapposte, "Device or resource busy", residui di Ceni,
 #          gestori di rete concorrenti, IP doppi sulle interfacce.
 # Uso:  sudo nc10-fix
@@ -19,7 +19,7 @@ PROBLEMI=0
 
 echo ""
 echo "========================================"
-echo "   NC10 — Diagnosi e riparazione rete"
+echo "   NC10 - Diagnosi e riparazione rete"
 echo "========================================"
 
 # --- 1) Processi di rete duplicati/sovrapposti ---

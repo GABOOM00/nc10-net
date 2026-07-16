@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh — Installa nc10-net, nc10-set, nc10-fix, nc10-server
+# install.sh - Installa nc10-net, nc10-set, nc10-fix, nc10-server
 # Uso:  sudo ./install.sh
 #
 

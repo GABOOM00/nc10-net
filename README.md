@@ -13,6 +13,7 @@ L'idea centrale è la **rete di sistema**: registri una sola connessione predefi
 | `sudo nc10-fix` | Diagnosi e riparazione automatica dei problemi di rete |
 | `nc10-server`   | Connessione SSH al server domestico |
 | `gaboom help`   | Elenco di tutti i comandi, con spiegazione |
+| `gaboom info`   | Dashboard: connessione, rete di sistema, server, memoria, disco |
 
 `gaboom` funziona anche come scorciatoia: `gaboom net`, `gaboom set`, `gaboom fix`, `gaboom server` lanciano i rispettivi comandi (con sudo automatico dove serve).
 

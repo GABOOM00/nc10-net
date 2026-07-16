@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# nc10-lib — Funzioni comuni per nc10-net, nc10-set, nc10-fix
+# nc10-lib - Funzioni comuni per nc10-net, nc10-set, nc10-fix
 # Viene installata in /usr/local/lib/nc10-lib.sh
 #
 

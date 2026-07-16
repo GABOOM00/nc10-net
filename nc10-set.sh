@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# nc10-set — Imposta, cambia, mostra o rimuove la "rete di sistema"
+# nc10-set - Imposta, cambia, mostra o rimuove la "rete di sistema"
 # Uso:  sudo nc10-set
 #
 
@@ -44,7 +44,7 @@ mostra_config() {
     else
         echo "Rete di sistema attuale:"
         case "$TIPO" in
-            wifi)     echo "  Tipo: WiFi — SSID: $SSID (password salvata)" ;;
+            wifi)     echo "  Tipo: WiFi - SSID: $SSID (password salvata)" ;;
             usb)      echo "  Tipo: telefono via cavo USB" ;;
             ethernet) echo "  Tipo: cavo ethernet" ;;
             *)        echo "  Tipo sconosciuto: $TIPO" ;;
@@ -55,7 +55,7 @@ mostra_config() {
 while true; do
     echo ""
     echo "========================================"
-    echo "   NC10 — Gestione rete di sistema"
+    echo "   NC10 - Gestione rete di sistema"
     echo "========================================"
     echo "  1) Imposta una rete WiFi come sistema"
     echo "  2) Imposta il telefono USB come sistema"
