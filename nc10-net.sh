@@ -75,6 +75,37 @@ connetti_altra_rete() {
     fi
 }
 
+connetti_con_failover() {
+    if connetti_sistema; then
+        return 0
+    fi
+
+    leggi_config
+    echo ""
+    info "FAILOVER: la rete di sistema non ha funzionato, provo le alternative..."
+
+    # Alternativa 1: cavo ethernet (solo se il cavo e' fisicamente collegato)
+    if [ "$TIPO" != "ethernet" ] && ethernet_collegata; then
+        info "Failover: rilevato cavo ethernet collegato."
+        if connetti_ethernet; then
+            ok "Connesso tramite FAILOVER (cavo ethernet)."
+            return 0
+        fi
+    fi
+
+    # Alternativa 2: telefono USB (solo se gia' collegato col tethering attivo)
+    if [ "$TIPO" != "usb" ] && usb_presente; then
+        if connetti_usb_auto; then
+            ok "Connesso tramite FAILOVER (telefono USB)."
+            return 0
+        fi
+    fi
+
+    err "Failover fallito: nessuna alternativa disponibile."
+    echo "    (per usare il telefono: collegalo col tethering attivo e scegli l'opzione 2)"
+    return 1
+}
+
 # ================= MENU PRINCIPALE =================
 controlla_comandi
 leggi_config
@@ -91,7 +122,7 @@ while true; do
     echo "===================================="
     echo "   NC10 - Come vuoi connetterti?"
     echo "===================================="
-    echo "  1) Rete di sistema ($DESCR_SISTEMA)"
+    echo "  1) Rete di sistema + failover ($DESCR_SISTEMA)"
     echo "  2) Telefono via cavo USB"
     echo "  3) Un'altra rete WiFi (con elenco)"
     echo "  4) Ripara la rete (nc10-fix)"
@@ -100,7 +131,7 @@ while true; do
     read -rp "Scelta [1-5]: " scelta
 
     case "$scelta" in
-        1) connetti_sistema && break ;;
+        1) connetti_con_failover && break ;;
         2) connetti_usb && break ;;
         3) connetti_altra_rete && break ;;
         4) /usr/local/bin/nc10-fix --da-menu; leggi_config ;;

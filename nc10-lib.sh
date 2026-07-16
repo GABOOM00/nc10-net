@@ -252,3 +252,33 @@ scegli_ssid_numerato() {
     ok "Rete scelta: $SSID_SCELTO"
     return 0
 }
+
+# ---------- Failover ----------
+
+usb_presente() {
+    [ -n "$(trova_interfaccia_usb)" ]
+}
+
+ethernet_collegata() {
+    # Vero solo se esiste un'interfaccia ethernet CON il cavo attaccato
+    local eth
+    eth=$(trova_interfaccia_ethernet)
+    [ -z "$eth" ] && return 1
+    ip link set "$eth" up 2>/dev/null
+    sleep 1
+    [ "$(cat /sys/class/net/$eth/carrier 2>/dev/null)" = "1" ]
+}
+
+connetti_usb_auto() {
+    # Come connetti_usb ma senza chiedere nulla: usata dal failover
+    # quando il telefono e' gia' collegato col tethering attivo
+    local usb
+    usb=$(trova_interfaccia_usb)
+    [ -z "$usb" ] && return 1
+    info "Failover: trovato telefono USB su $usb, mi connetto..."
+    pulisci_connessioni
+    ip link set "$usb" up
+    sleep 1
+    dhclient -v "$usb" 2>/dev/null
+    test_connessione
+}
